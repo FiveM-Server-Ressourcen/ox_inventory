@@ -24,6 +24,7 @@ const initialState: State = {
     maxWeight: 0,
     items: [],
   },
+  wardrobeItems: {},
   additionalMetadata: new Array(),
   itemAmount: 0,
   shiftPressed: false,
@@ -62,6 +63,12 @@ export const inventorySlice = createSlice({
 
       container.weight = action.payload;
     },
+    setWardrobeItems: (state, action: PayloadAction<Record<string, any>>) => {
+      state.wardrobeItems = action.payload;
+    },
+    updateWardrobeSlot: (state, action: PayloadAction<{ slotType: string; item: any | null }>) => {
+      state.wardrobeItems[action.payload.slotType] = action.payload.item;
+    },
   },
   extraReducers: (builder) => {
     builder.addMatcher(isPending, (state) => {
@@ -95,10 +102,13 @@ export const {
   stackSlots,
   refreshSlots,
   setContainerWeight,
+  setWardrobeItems,
+  updateWardrobeSlot,
 } = inventorySlice.actions;
 export const selectLeftInventory = (state: RootState) => state.inventory.leftInventory;
 export const selectRightInventory = (state: RootState) => state.inventory.rightInventory;
 export const selectItemAmount = (state: RootState) => state.inventory.itemAmount;
 export const selectIsBusy = (state: RootState) => state.inventory.isBusy;
+export const selectWardrobeItems = (state: RootState) => state.inventory.wardrobeItems;
 
 export default inventorySlice.reducer;

@@ -212,4 +212,203 @@ exports('isClothingItem', function(itemName)
     return CLOTHING_ITEM_SET[itemName] == true
 end)
 
+-- ── NUI-Events: Anziehen / Ausziehen ─────────────────────────────────────────
+
+-- Spieler zieht Kleidung aus Inventory an (Drag auf EquipmentPanel)
+RegisterNetEvent('ox_inventory:clothing:equipFromInventory', function(fromSlot, slotType)
+    local src = source
+    if not Inventory or not fromSlot or not slotType then return end
+
+    local wardrobeSlot = WARDROBE_SLOTS[slotType]
+    if not wardrobeSlot then return end
+
+    local playerInv = Inventory(src)
+    if not playerInv or not playerInv.owner then return end
+
+    local sourceItem = playerInv.items[fromSlot]
+    if not sourceItem or not sourceItem.name then return end
+
+    -- Item muss zum Slot passen
+    if sourceItem.name ~= 'cloth_' .. slotType then
+        lib.notify(src, { title = 'Garderobe', description = 'Dieses Item passt nicht in diesen Slot.', type = 'error' })
+        return
+    end
+
+    local wardrobeId = ('wardrobe:%s'):format(playerInv.owner)
+    registerWardrobe(playerInv.owner)
+    Wait(50)
+
+    local wardrobeInv = Inventory(wardrobeId)
+    -- Vorhandenes Item im Ziel-Slot ausziehen und zurück ins Inventory legen
+    if wardrobeInv and wardrobeInv.items[wardrobeSlot] then
+        local existingItem = wardrobeInv.items[wardrobeSlot]
+        if existingItem and existingItem.name then
+            wardrobeInv:RemoveItem(existingItem.name, existingItem.count or 1, existingItem.metadata, wardrobeSlot)
+            playerInv:AddItem(existingItem.name, existingItem.count or 1, existingItem.metadata)
+            TriggerClientEvent('ox_inventory:clothing:unequip', src, existingItem.name, wardrobeSlot, existingItem.metadata)
+        end
+    end
+
+    -- Item aus Spieler-Inventory in Schrank verschieben
+    local removed = playerInv:RemoveItem(sourceItem.name, sourceItem.count or 1, sourceItem.metadata, fromSlot)
+    if not removed then return end
+
+    wardrobeInv = Inventory(wardrobeId)
+    if wardrobeInv then
+        wardrobeInv:AddItem(sourceItem.name, sourceItem.count or 1, sourceItem.metadata, wardrobeSlot)
+    end
+
+    TriggerClientEvent('ox_inventory:clothing:equip', src, sourceItem.name, wardrobeSlot, sourceItem.metadata)
+end)
+
+-- Spieler zieht Kleidung aus (Doppelklick auf EquipmentPanel)
+RegisterNetEvent('ox_inventory:clothing:unequipToInventory', function(slotType)
+    local src = source
+    if not Inventory or not slotType then return end
+
+    local wardrobeSlot = WARDROBE_SLOTS[slotType]
+    if not wardrobeSlot then return end
+
+    local playerInv = Inventory(src)
+    if not playerInv or not playerInv.owner then return end
+
+    local wardrobeId  = ('wardrobe:%s'):format(playerInv.owner)
+    registerWardrobe(playerInv.owner)
+    Wait(50)
+
+    local wardrobeInv = Inventory(wardrobeId)
+    if not wardrobeInv then return end
+
+    local item = wardrobeInv.items[wardrobeSlot]
+    if not item or not item.name then return end
+
+    wardrobeInv:RemoveItem(item.name, item.count or 1, item.metadata, wardrobeSlot)
+    playerInv:AddItem(item.name, item.count or 1, item.metadata)
+    TriggerClientEvent('ox_inventory:clothing:unequip', src, item.name, wardrobeSlot, item.metadata)
+end)
+
+-- ── illenium-appearance: Kleidung als Items speichern ────────────────────────
+
+local COMPONENT_TO_SLOT = {
+    [1] = 'mask', [2] = 'hair', [3] = 'torso', [4] = 'legs',
+    [5] = 'bag',  [6] = 'shoes', [7] = 'accessory', [8] = 'undershirt',
+    [9] = 'armor', [10] = 'decal', [11] = 'top',
+}
+
+local PROP_TO_SLOT = {
+    [0] = 'hat', [1] = 'glasses', [2] = 'ear', [6] = 'watch', [7] = 'bracelet',
+}
+
+local playerLastAppearance = {}
+
+local function getChangedClothing(oldApp, newApp)
+    local changes = {}
+
+    local oldComps = (oldApp and type(oldApp.components) == 'table' and oldApp.components) or {}
+    local newComps = (newApp and type(newApp.components) == 'table' and newApp.components) or {}
+
+    for id, slotType in pairs(COMPONENT_TO_SLOT) do
+        local old = oldComps[id] or {}
+        local new = newComps[id] or {}
+        if new.drawable ~= nil and (new.drawable ~= (old.drawable or -1) or (new.texture or 0) ~= (old.texture or 0)) then
+            changes[slotType] = {
+                drawable = new.drawable,
+                texture  = new.texture  or 0,
+                palette  = new.palette  or 0,
+            }
+        end
+    end
+
+    local oldProps = (oldApp and type(oldApp.props) == 'table' and oldApp.props) or {}
+    local newProps = (newApp and type(newApp.props) == 'table' and newApp.props) or {}
+
+    for id, slotType in pairs(PROP_TO_SLOT) do
+        local old = oldProps[id] or {}
+        local new = newProps[id] or {}
+        if new.drawable ~= nil and (new.drawable ~= (old.drawable or -1) or (new.texture or 0) ~= (old.texture or 0)) then
+            changes[slotType] = { drawable = new.drawable, texture = new.texture or 0 }
+        end
+    end
+
+    return changes
+end
+
+local function applyAppearanceToWardrobe(src, appearance)
+    if not Inventory or not appearance then return end
+
+    local playerInv = Inventory(src)
+    if not playerInv or not playerInv.owner then return end
+
+    local wardrobeId = ('wardrobe:%s'):format(playerInv.owner)
+    registerWardrobe(playerInv.owner)
+    Wait(50)
+
+    local oldApp = playerLastAppearance[src]
+    playerLastAppearance[src] = appearance
+
+    local diff = getChangedClothing(oldApp, appearance)
+    if not next(diff) then return end
+
+    local wardrobeInv = Inventory(wardrobeId)
+    if not wardrobeInv then return end
+
+    for slotType, metadata in pairs(diff) do
+        local itemName     = 'cloth_' .. slotType
+        local wardrobeSlot = WARDROBE_SLOTS[slotType]
+        if not wardrobeSlot then goto continue end
+
+        metadata.label = slotType:sub(1,1):upper() .. slotType:sub(2)
+
+        -- Altes Item im Slot entfernen
+        local existingItem = wardrobeInv.items[wardrobeSlot]
+        if existingItem and existingItem.name then
+            wardrobeInv:RemoveItem(existingItem.name, existingItem.count or 1, existingItem.metadata, wardrobeSlot)
+        end
+
+        -- Neues Item in Schrank legen (zieht automatisch an via swapItems Hook)
+        wardrobeInv:AddItem(itemName, 1, metadata, wardrobeSlot)
+        TriggerClientEvent('ox_inventory:clothing:equip', src, itemName, wardrobeSlot, metadata)
+
+        ::continue::
+    end
+
+    lib.notify(src, {
+        title       = 'Garderobe',
+        description = 'Kleidung in Garderobe gespeichert.',
+        type        = 'success',
+        duration    = 3000,
+    })
+end
+
+-- illenium-appearance: Wenn Spieler Aussehen speichert
+AddEventHandler('illenium-appearance:server:saveAppearance', function(src, appearance)
+    CreateThread(function()
+        applyAppearanceToWardrobe(src, appearance)
+    end)
+end)
+
+-- fivem-appearance als Fallback
+AddEventHandler('fivem-appearance:server:saveAppearance', function(src, appearance)
+    CreateThread(function()
+        applyAppearanceToWardrobe(src, appearance)
+    end)
+end)
+
+-- Spieler joined: Appearance zwischenspeichern für Diff-Berechnung
+AddEventHandler('ox_inventory:playerLoaded', function(src)
+    SetTimeout(5000, function()
+        if not GetPlayerName(src) then return end
+        local ok, appearance = pcall(function()
+            return exports['illenium-appearance']:getPlayerAppearance(src)
+        end)
+        if ok and type(appearance) == 'table' then
+            playerLastAppearance[src] = appearance
+        end
+    end)
+end)
+
+AddEventHandler('playerDropped', function()
+    playerLastAppearance[source] = nil
+end)
+
 print('^2[ox_inventory] Kleidungsmodul (Server) geladen^0')

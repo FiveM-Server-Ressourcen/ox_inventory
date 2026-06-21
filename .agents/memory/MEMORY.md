@@ -1,0 +1,1 @@
+- [ox_inventory Clothing System](clothing-system.md) — full clothing slot system integrated with illenium-appearance; wardrobe stash per player, 16 typed slots, React EquipmentPanel, NUI bridge complete

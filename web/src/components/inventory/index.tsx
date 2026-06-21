@@ -3,11 +3,12 @@ import useNuiEvent from '../../hooks/useNuiEvent';
 import InventoryControl from './InventoryControl';
 import InventoryHotbar from './InventoryHotbar';
 import { useAppDispatch } from '../../store';
-import { refreshSlots, setAdditionalMetadata, setupInventory } from '../../store/inventory';
+import { refreshSlots, setAdditionalMetadata, setupInventory, setWardrobeItems, updateWardrobeSlot } from '../../store/inventory';
 import { useExitListener } from '../../hooks/useExitListener';
 import type { Inventory as InventoryProps } from '../../typings';
 import RightInventory from './RightInventory';
 import LeftInventory from './LeftInventory';
+import EquipmentPanel from './EquipmentPanel';
 import Tooltip from '../utils/Tooltip';
 import { closeTooltip } from '../../store/tooltip';
 import InventoryContext from './InventoryContext';
@@ -40,10 +41,19 @@ const Inventory: React.FC = () => {
     dispatch(setAdditionalMetadata(data));
   });
 
+  useNuiEvent<Record<string, any>>('updateWardrobeItems', (data) => {
+    dispatch(setWardrobeItems(data));
+  });
+
+  useNuiEvent<{ slotType: string; item: any | null }>('updateWardrobeSlot', (data) => {
+    dispatch(updateWardrobeSlot(data));
+  });
+
   return (
     <>
       <Fade in={inventoryVisible}>
         <div className="inventory-wrapper">
+          <EquipmentPanel />
           <LeftInventory />
           <InventoryControl />
           <RightInventory />
