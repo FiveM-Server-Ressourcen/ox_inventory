@@ -15,6 +15,8 @@ dependencies {
     'ox_lib',
 }
 
+-- illenium-appearance oder fivem-appearance werden optional unterstützt
+
 shared_script '@ox_lib/init.lua'
 
 ox_libs {
@@ -43,5 +45,9 @@ files {
     'modules/**/shared.lua',
     'modules/**/client.lua',
     'modules/bridge/**/client.lua',
+    'modules/clothing/client.lua',
     'data/*.lua',
 }
+
+server_script 'modules/clothing/server.lua'
+client_script 'modules/clothing/client.lua'
